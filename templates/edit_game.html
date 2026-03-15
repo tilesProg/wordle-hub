@@ -1,0 +1,596 @@
+{% extends "base.html" %}
+{% block title %}Edit: {{ game.name }} - Progle{% endblock %}
+{% block content %}
+<div class="container">
+  <div style="max-width: 1400px; margin: 0 auto;">
+    <div style="margin-bottom: 2rem;">
+      <h1>Edit: {{ game.name }}</h1>
+    </div>
+
+    <!-- Settings Section -->
+    <div class="form-section" style="margin-bottom: 2rem;">
+      <h3 style="margin-bottom: 1.5rem;">⚙️ Game Settings</h3>
+      <form method="post">
+        <input type="hidden" name="action" value="update_settings">
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div class="form-group">
+            <label for="name">Name</label>
+            <input id="name" name="name" type="text" value="{{ game.name }}" required>
+          </div>
+
+          <div class="form-group">
+            <label for="description">Description</label>
+            <input id="description" name="description" type="text" value="{{ game.description or '' }}">
+          </div>
+
+          <div class="form-group">
+            <label for="access">Game Access</label>
+            <select id="access" name="access">
+              <option {% if game.access=='public' %}selected{% endif %} value="public">🌍 Public</option>
+              <option {% if game.access=='link' %}selected{% endif %} value="link">🔗 Link-only</option>
+              <option {% if game.access=='private' %}selected{% endif %} value="private">🔒 Private</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="max_guesses">Max Guesses</label>
+            <input id="max_guesses" name="max_guesses" type="number" min="1" value="{{ game.max_guesses or '' }}" placeholder="Unlimited">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0; cursor: pointer;">
+            <input type="checkbox" name="is_hidden" {% if game.is_hidden %}checked{% endif %} style="width: auto;">
+            <span>Hide from public hub</span>
+          </label>
+        </div>
+
+        <button type="submit" class="success" style="width: 100%; margin-top: 1rem;">💾 Save Settings</button>
+      </form>
+
+      {% if game.access == 'link' and game.link_token %}
+        <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid rgba(255, 107, 53, 0.15);">
+          <small class="text-muted">Share this link:</small>
+          <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+            <input id="linkToken" type="text" value="{{ game.link_token }}" readonly style="flex: 1; font-size: 0.8rem;">
+            <button id="copyLinkToken" type="button" class="contrast" style="font-size: 0.8rem;">Copy</button>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Three Column Layout -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1.5fr; gap: 1.5rem; margin-bottom: 2rem;">
+      
+      <!-- Categories Section -->
+      <div class="form-section">
+        <h3 style="margin-bottom: 1rem;">📁 Categories ({{ game.categories|length }}/6)</h3>
+        
+        {% if game.categories %}
+          <div style="display: grid; gap: 0.75rem; margin-bottom: 1rem;">
+            {% for cat in game.categories %}
+              <div style="padding: 0.75rem; background: rgba(255, 107, 53, 0.08); border: 1px solid rgba(255, 107, 53, 0.2); border-radius: 6px;">
+                <div style="display: flex; justify-content: space-between; align-items: start; gap: 0.5rem;">
+                  <div>
+                    <h4 style="margin: 0 0 0.2rem 0; font-size: 0.9rem; color: var(--text-primary);">{{ cat.name }}</h4>
+                    <small class="text-muted" style="font-size: 0.7rem;">{{ cat.kind }}</small>
+                  </div>
+                  <button class="delete-cat" data-cat-id="{{ cat.id }}" type="button" style="padding: 0.3rem 0.5rem; font-size: 0.7rem; flex-shrink: 0; background: #d94520; border: none; color: white; border-radius: 2px; cursor: pointer;">🗑️</button>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        {% if game.categories|length < 6 %}
+          <div style="border-top: 1px solid rgba(255, 107, 53, 0.15); padding-top: 0.75rem;">
+            <form id="add_cat_form">
+              <div class="form-group" style="margin-bottom: 0.5rem;">
+                <label for="cat_name" style="font-size: 0.8rem;">Name</label>
+                <input id="cat_name" type="text" placeholder="e.g., Color" required style="font-size: 0.85rem;">
+              </div>
+              <div class="form-group" style="margin-bottom: 0.5rem;">
+                <label for="cat_kind" style="font-size: 0.8rem;">Type</label>
+                <select id="cat_kind" style="font-size: 0.85rem;">
+                  <option value="list">List</option>
+                  <option value="date">Date</option>
+                  <option value="number">Number</option>
+                </select>
+              </div>
+              <button type="button" id="add_cat_btn" style="width: 100%; font-size: 0.8rem;">+ Add</button>
+            </form>
+          </div>
+        {% else %}
+          <p style="font-size: 0.75rem; color: var(--text-tertiary); margin: 0; padding-top: 0.75rem; border-top: 1px solid rgba(255, 107, 53, 0.15);">Max 6 categories</p>
+        {% endif %}
+      </div>
+
+      <!-- Items Section (for list categories) -->
+      <div class="form-section">
+        <h3 style="margin-bottom: 1rem;">📋 Items</h3>
+        
+        {% set list_cats = game.categories | selectattr('kind', 'equalto', 'list') | list %}
+        {% if list_cats %}
+          <div id="items_container" style="margin-bottom: 1rem;">
+            {% for cat in list_cats %}
+              <details id="cat_{{ cat.id }}_container" style="margin-bottom: 0.5rem;">
+                <summary style="font-weight: 600; padding: 0.5rem; background: rgba(255, 107, 53, 0.1); border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
+                  {{ cat.name }} ({{ cat.list_items|length }})
+                </summary>
+                <div style="padding: 0.5rem; margin-top: 0.3rem; background: rgba(0, 0, 0, 0.1); border-radius: 4px; max-height: 150px; overflow-y: auto;">
+                  <div id="items_{{ cat.id }}" class="items-list" style="display: grid; gap: 0.3rem;">
+                    {% for item in cat.list_items %}
+                      <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.3rem 0.4rem; background: rgba(26, 37, 81, 0.5); border-radius: 3px; font-size: 0.8rem;">
+                        <span>{{ item.value }}</span>
+                        <button class="delete-item" data-item-id="{{ item.id }}" type="button" style="padding: 0.2rem 0.3rem; font-size: 0.65rem; background: #d94520; border: none; color: white; border-radius: 2px; cursor: pointer;">✕</button>
+                      </div>
+                    {% endfor %}
+                  </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr auto; gap: 0.3rem; margin-top: 0.4rem;">
+                  <textarea class="bulk-items" data-cat-id="{{ cat.id }}" placeholder="apple&#10;banana&#10;orange" style="font-size: 0.75rem; min-height: 50px; font-family: monospace; padding: 0.3rem;"></textarea>
+                  <button class="add-items-btn" data-cat-id="{{ cat.id }}" type="button" style="font-size: 0.75rem; white-space: nowrap; padding: 0.3rem 0.6rem; align-self: flex-end; background: #4a5f99; border: none; color: white; border-radius: 3px; cursor: pointer;">Add Items</button>
+                </div>
+              </details>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="text-muted" style="font-size: 0.85rem;">No list categories yet.</p>
+        {% endif %}
+      </div>
+
+      <!-- Words Section -->
+      <div class="form-section">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <h3 style="margin: 0;">📝 Words ({{ game.words|length }})</h3>
+          <input type="text" id="word_search" placeholder="Search..." style="width: 120px; font-size: 0.8rem;">
+        </div>
+
+        {% if game.words %}
+          <div style="height: 500px; overflow-y: auto; border: 1px solid rgba(255, 107, 53, 0.15); border-radius: 6px; background: rgba(26, 37, 81, 0.1);">
+            <div id="words_container">
+              {% for word in game.words %}
+                <div class="word-item" data-word-id="{{ word.id }}" data-word-name="{{ word.name }}" style="padding: 0.6rem; border-bottom: 1px solid rgba(255, 107, 53, 0.1); display: flex; justify-content: space-between; align-items: start; gap: 0.5rem; cursor: pointer; transition: 0.2s;">
+                  <div style="flex: 1; min-width: 0;">
+                    <h4 style="margin: 0 0 0.25rem 0; color: var(--text-primary); word-break: break-word; font-size: 0.9rem;">{{ word.name }}</h4>
+                    {% set cat_vals = word.cat_values | deserialize_cat_values %}
+                    <div style="display: flex; flex-wrap: wrap; gap: 0.3rem;">
+                      {% for cat in game.categories %}
+                        {% set val = cat_vals.get(cat.id, [] if cat.kind == 'list' else '') %}
+                        {% if val %}
+                          <span style="font-size: 0.65rem; padding: 0.15rem 0.3rem; background: rgba(255, 107, 53, 0.15); border-radius: 2px; color: var(--text-secondary);">
+                            {% if cat.kind == 'list' %}{{ val|join(',') }}{% else %}{{ val }}{% endif %}
+                          </span>
+                        {% endif %}
+                      {% endfor %}
+                    </div>
+                  </div>
+                  <div style="display: flex; gap: 0.2rem; flex-shrink: 0;">
+                    <button class="edit-word-btn" data-word-id="{{ word.id }}" type="button" style="padding: 0.25rem 0.4rem; font-size: 0.7rem; background: #4a5f99; border: none; color: white; border-radius: 3px; cursor: pointer;">✎</button>
+                    <button class="delete-word-btn" data-word-id="{{ word.id }}" type="button" style="padding: 0.25rem 0.4rem; font-size: 0.7rem; background: #d94520; border: none; color: white; border-radius: 3px; cursor: pointer;">🗑</button>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        {% else %}
+          <p class="text-muted" style="font-size: 0.85rem;">No words yet.</p>
+        {% endif %}
+
+        {% if game.categories %}
+          <div style="border-top: 1px solid rgba(255, 107, 53, 0.15); padding-top: 0.75rem; margin-top: 0.75rem;">
+            <form id="add_word_form">
+              <div class="form-group" style="margin-bottom: 0.4rem;">
+                <label style="font-size: 0.8rem;">Word</label>
+                <input id="word_name" type="text" placeholder="e.g., Tiger" required style="font-size: 0.85rem;">
+              </div>
+              
+              <div id="word_cat_inputs" style="display: grid; gap: 0.4rem; margin-bottom: 0.5rem; max-height: 300px; overflow-y: auto;">
+                {% for cat in game.categories %}
+                  <div style="padding: 0.4rem; background: rgba(0, 0, 0, 0.1); border-radius: 3px;">
+                    <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary);">{{ cat.name }}</label>
+                    {% if cat.kind == 'list' %}
+                      <details style="margin-top: 0.2rem;">
+                        <summary style="font-size: 0.75rem; cursor: pointer; padding: 0.3rem; background: rgba(255, 107, 53, 0.1); border-radius: 2px; margin-bottom: 0.3rem;">Select items ({{ cat.list_items|length }})</summary>
+                        <input type="text" class="cat-search" data-cat-id="{{ cat.id }}" placeholder="Search..." style="font-size: 0.7rem; width: 100%; padding: 0.3rem; margin-bottom: 0.3rem; border: 1px solid rgba(255, 107, 53, 0.3); border-radius: 2px;">
+                        <div class="cat-items-container" data-cat-id="{{ cat.id }}" style="display: grid; grid-template-columns: 1fr; gap: 0.2rem; max-height: 150px; overflow-y: auto;">
+                          {% for item in cat.list_items %}
+                            <label style="display: flex; align-items: center; gap: 0.2rem; margin-bottom: 0; cursor: pointer; font-size: 0.75rem;" class="item-label">
+                              <input type="checkbox" class="word-item-checkbox" data-cat-id="{{ cat.id }}" data-item-value="{{ item.value }}" style="width: auto;">
+                              <span>{{ item.value }}</span>
+                            </label>
+                          {% endfor %}
+                        </div>
+                      </details>
+                    {% elif cat.kind == 'date' %}
+                      <input type="date" class="word-cat-input" data-cat-id="{{ cat.id }}" style="font-size: 0.75rem; width: 100%; margin-top: 0.2rem;">
+                    {% elif cat.kind == 'number' %}
+                      <input type="number" class="word-cat-input" data-cat-id="{{ cat.id }}" placeholder="#" style="font-size: 0.75rem; width: 100%; margin-top: 0.2rem;">
+                    {% endif %}
+                  </div>
+                {% endfor %}
+              </div>
+
+              <button type="button" id="add_word_btn" style="width: 100%; font-size: 0.8rem; background: #ff6b35; border: none; color: white; padding: 0.5rem; border-radius: 4px; cursor: pointer;">✨ Add Word</button>
+            </form>
+          </div>
+        {% else %}
+          <p class="text-muted" style="font-size: 0.8rem;">Add categories first.</p>
+        {% endif %}
+      </div>
+
+    </div>
+
+    <!-- Back to Game -->
+    <div style="text-align: center;">
+      <a href="{{ url_for('play_game', game_id=game.id) }}" class="btn contrast">← Back to Game</a>
+    </div>
+  </div>
+</div>
+
+<!-- Word Edit Modal -->
+<div id="word_edit_modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; padding: 2rem;">
+  <div style="background: var(--bg-0); border: 1px solid rgba(255, 107, 53, 0.3); border-radius: 8px; max-width: 600px; margin: 0 auto; padding: 1.5rem; max-height: 80vh; overflow-y: auto;">
+    <h3 style="margin-top: 0;">Edit Word Order</h3>
+    <p class="text-muted" style="font-size: 0.85rem;">Drag items to set the order. This order applies to this word only.</p>
+    <div id="edit_order_container" style="display: grid; gap: 0.5rem; margin-bottom: 1rem;">
+      <!-- Populated by JS -->
+    </div>
+    <div style="display: flex; gap: 1rem;">
+      <button id="save_word_order_btn" type="button" style="flex: 1; background: #2ecc71; border: none; color: white; padding: 0.5rem; border-radius: 4px; cursor: pointer; font-weight: 600;">💾 Save Order</button>
+      <button id="close_modal_btn" type="button" style="flex: 1; background: #4a5f99; border: none; color: white; padding: 0.5rem; border-radius: 4px; cursor: pointer; margin-left: 0.5rem;">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const gameId = {{ game.id }};
+console.log('Edit game script loaded for game:', gameId);
+
+// Helper for API calls with better error handling
+async function apiCall(url, body = null) {
+  const method = body ? 'POST' : 'GET';
+  console.log(`[API] ${method} ${url}`, body || '');
+  
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: {'Content-Type': 'application/json'},
+      body: body ? JSON.stringify(body) : undefined
+    });
+    console.log(`[API Response] Status: ${res.status}`);
+    
+    if (!res.ok) {
+      const text = await res.text();
+      console.error(`[API Error] ${res.status}: ${text}`);
+      return { ok: false, error: `Server error: ${res.status}` };
+    }
+    
+    const data = await res.json();
+    console.log(`[API Data]`, data);
+    return { ok: true, data };
+  } catch (err) {
+    console.error(`[API Exception]`, err);
+    return { ok: false, error: err.message };
+  }
+}
+
+// Copy link token
+document.getElementById('copyLinkToken')?.addEventListener('click', function() {
+  console.log('Copy token clicked');
+  const token = document.getElementById('linkToken').value;
+  navigator.clipboard.writeText(token).then(() => {
+    const btn = this;
+    const orig = btn.textContent;
+    btn.textContent = '✅ Copied!';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  });
+});
+
+// Word search
+const searchInput = document.getElementById('word_search');
+const wordsContainer = document.getElementById('words_container');
+if (searchInput && wordsContainer) {
+  searchInput.addEventListener('input', function(e) {
+    const query = e.target.value.toLowerCase();
+    Array.from(wordsContainer.querySelectorAll('.word-item')).forEach(item => {
+      const name = item.dataset.wordName.toLowerCase();
+      item.style.display = name.includes(query) ? 'flex' : 'none';
+    });
+  });
+}
+
+// Category item search
+document.querySelectorAll('.cat-search').forEach(searchField => {
+  searchField.addEventListener('input', function(e) {
+    const catId = this.dataset.catId;
+    const query = e.target.value.toLowerCase();
+    const container = document.querySelector(`.cat-items-container[data-cat-id="${catId}"]`);
+    container.querySelectorAll('.item-label').forEach(label => {
+      const text = label.textContent.toLowerCase();
+      label.style.display = text.includes(query) ? 'flex' : 'none';
+    });
+  });
+});
+
+// Add category (AJAX)
+document.getElementById('add_cat_btn')?.addEventListener('click', async function(e) {
+  e.preventDefault();
+  console.log('Add category clicked');
+  const name = document.getElementById('cat_name').value.trim();
+  const kind = document.getElementById('cat_kind').value;
+  if (!name) { alert('Enter category name'); return; }
+  
+  this.disabled = true;
+  const result = await apiCall(`/api/game/${gameId}/add-category`, {name, kind});
+  if (result.ok) {
+    document.getElementById('cat_name').value = '';
+    setTimeout(() => window.location.reload(), 300);
+  } else {
+    alert('Error: ' + result.error);
+  }
+  this.disabled = false;
+});
+
+// Delete category (AJAX)
+document.querySelectorAll('.delete-cat').forEach(btn => {
+  btn.addEventListener('click', async function(e) {
+    e.stopPropagation();
+    console.log('Delete category clicked');
+    if (!confirm('Delete category?')) return;
+    const catId = this.dataset.catId;
+    const result = await apiCall(`/api/game/${gameId}/delete-category/${catId}`);
+    if (result.ok) {
+      setTimeout(() => window.location.reload(), 300);
+    } else {
+      alert('Error: ' + result.error);
+    }
+  });
+});
+
+// Add items (AJAX bulk)
+function attachItemsButtonListener(btn) {
+  btn.addEventListener('click', async function(e) {
+    e.preventDefault();
+    console.log('Add items clicked');
+    const catId = this.dataset.catId;
+    const textarea = document.querySelector(`.bulk-items[data-cat-id="${catId}"]`);
+    const text = textarea.value.trim();
+    if (!text) { alert('Enter items'); return; }
+    
+    const items = text.split('\n').map(s => s.trim()).filter(s => s);
+    this.disabled = true;
+    const result = await apiCall(`/api/game/${gameId}/add-items`, {categoryId: parseInt(catId), items});
+    if (result.ok) {
+      textarea.value = '';
+      // Fetch updated items and add to DOM without reloading
+      const itemsRes = await fetch(`/api/game/${gameId}/category/${catId}/items`);
+      if (itemsRes.ok) {
+        const newItems = await itemsRes.json();
+        const itemsList = document.getElementById(`items_${catId}`);
+        itemsList.innerHTML = '';
+        newItems.forEach(item => {
+          const div = document.createElement('div');
+          div.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 0.3rem 0.4rem; background: rgba(26, 37, 81, 0.5); border-radius: 3px; font-size: 0.8rem;';
+          div.innerHTML = `<span>${item.value}</span><button class="delete-item" data-item-id="${item.id}" type="button" style="padding: 0.2rem 0.3rem; font-size: 0.65rem; background: #d94520; border: none; color: white; border-radius: 2px; cursor: pointer; flex-shrink: 0;">✕</button>`;
+          itemsList.appendChild(div);
+        });
+        // Re-attach delete-item listeners
+        document.querySelectorAll('.delete-item').forEach(delBtn => {
+          if (!delBtn.hasListener) {
+            delBtn.hasListener = true;
+            delBtn.addEventListener('click', async function(e) {
+              e.stopPropagation();
+              console.log('Delete item clicked');
+              const itemId = this.dataset.itemId;
+              const result = await apiCall(`/api/game/${gameId}/delete-item/${itemId}`);
+              if (result.ok) {
+                this.closest('div').remove();
+              } else {
+                alert('Error: ' + result.error);
+              }
+            });
+          }
+        });
+      }
+    } else {
+      alert('Error: ' + result.error);
+    }
+    this.disabled = false;
+  });
+}
+
+document.querySelectorAll('.add-items-btn').forEach(btn => attachItemsButtonListener(btn));
+
+// Delete item (AJAX)
+document.querySelectorAll('.delete-item').forEach(btn => {
+  btn.addEventListener('click', async function(e) {
+    e.stopPropagation();
+    console.log('Delete item clicked');
+    const itemId = this.dataset.itemId;
+    const result = await apiCall(`/api/game/${gameId}/delete-item/${itemId}`);
+    if (result.ok) {
+      this.closest('div').remove();
+    } else {
+      alert('Error: ' + result.error);
+    }
+  });
+});
+
+// Add word (AJAX)
+document.getElementById('add_word_btn')?.addEventListener('click', async function(e) {
+  e.preventDefault();
+  console.log('Add word clicked');
+  const name = document.getElementById('word_name').value.trim();
+  if (!name) { alert('Enter word name'); return; }
+  
+  const mapping = {};
+  {% for cat in game.categories %}
+    {% if cat.kind == 'list' %}
+      mapping[{{ cat.id }}] = Array.from(document.querySelectorAll('.word-item-checkbox[data-cat-id="{{ cat.id }}"]:checked')).map(cb => cb.dataset.itemValue);
+    {% else %}
+      (function() {
+        const val = document.querySelector('.word-cat-input[data-cat-id="{{ cat.id }}"]')?.value || '';
+        if (val) mapping[{{ cat.id }}] = val;
+      })();
+    {% endif %}
+  {% endfor %}
+  
+  this.disabled = true;
+  const result = await apiCall(`/api/game/${gameId}/add-word`, {name, mapping});
+  if (result.ok) {
+    document.getElementById('word_name').value = '';
+    document.querySelectorAll('.word-item-checkbox').forEach(cb => cb.checked = false);
+    document.querySelectorAll('.word-cat-input').forEach(inp => inp.value = '');
+    setTimeout(() => window.location.reload(), 300);
+  } else {
+    alert('Error: ' + result.error);
+  }
+  this.disabled = false;
+});
+
+// Delete word (AJAX)
+document.querySelectorAll('.delete-word-btn').forEach(btn => {
+  btn.addEventListener('click', async function(e) {
+    e.stopPropagation();
+    console.log('Delete word clicked');
+    if (!confirm('Delete word?')) return;
+    const wordId = this.dataset.wordId;
+    const result = await apiCall(`/api/game/${gameId}/delete-word/${wordId}`);
+    if (result.ok) {
+      setTimeout(() => window.location.reload(), 300);
+    } else {
+      alert('Error: ' + result.error);
+    }
+  });
+});
+
+// Edit word order - open modal
+document.querySelectorAll('.edit-word-btn').forEach(btn => {
+  btn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    console.log('Edit word clicked');
+    const wordId = this.dataset.wordId;
+    const wordItem = this.closest('.word-item');
+    const wordName = wordItem.dataset.wordName;
+    openWordEditModal(wordId, wordName);
+  });
+});
+
+function openWordEditModal(wordId, wordName) {
+  console.log('Opening modal for word:', wordId);
+  fetch(`/api/game/${gameId}/word/${wordId}`)
+    .then(r => r.json())
+    .then(data => {
+      console.log('Word data:', data);
+      const modal = document.getElementById('word_edit_modal');
+      const container = document.getElementById('edit_order_container');
+      container.innerHTML = '';
+      document.getElementById('save_word_order_btn').dataset.wordId = wordId;
+      
+      let hasItems = false;
+      data.categories.forEach(cat => {
+        if (cat.kind === 'list' && data.values[cat.id] && data.values[cat.id].length > 0) {
+          hasItems = true;
+          const div = document.createElement('div');
+          div.style.marginBottom = '1rem';
+          
+          const h4 = document.createElement('h4');
+          h4.style.cssText = 'margin: 0 0 0.5rem 0; font-size: 0.9rem; font-weight: 600;';
+          h4.textContent = cat.name;
+          div.appendChild(h4);
+          
+          const itemsDiv = document.createElement('div');
+          itemsDiv.dataset.orderCat = cat.id;
+          itemsDiv.style.cssText = 'display: grid; gap: 0.4rem;';
+          
+          data.values[cat.id].forEach(item => {
+            const itemDiv = document.createElement('div');
+            itemDiv.draggable = true;
+            itemDiv.dataset.orderItem = item;
+            itemDiv.style.cssText = 'padding: 0.6rem; background: rgba(255, 107, 53, 0.2); border: 1px solid rgba(255, 107, 53, 0.4); border-radius: 4px; cursor: grab; user-select: none;';
+            itemDiv.textContent = item;
+            
+            itemDiv.addEventListener('dragstart', function(e) {
+              draggedItem = this;
+              this.style.opacity = '0.5';
+              e.dataTransfer.effectAllowed = 'move';
+            });
+            itemDiv.addEventListener('dragover', function(e) {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
+            });
+            itemDiv.addEventListener('drop', function(e) {
+              e.preventDefault();
+              if (draggedItem && draggedItem !== this && draggedItem.parentNode === this.parentNode) {
+                this.parentNode.insertBefore(draggedItem, this);
+              }
+            });
+            itemDiv.addEventListener('dragend', function(e) {
+              this.style.opacity = '1';
+            });
+            
+            itemsDiv.appendChild(itemDiv);
+          });
+          
+          div.appendChild(itemsDiv);
+          container.appendChild(div);
+        }
+      });
+      
+      if (!hasItems) {
+        container.innerHTML = '<p style="font-size: 0.9rem; color: var(--text-muted);">No list items to reorder for this word</p>';
+      }
+      
+      modal.style.display = 'block';
+    })
+    .catch(err => {
+      console.error('Error fetching word:', err);
+      alert('Error loading word data');
+    });
+}
+
+let draggedItem = null;
+
+// Save word order
+document.getElementById('save_word_order_btn')?.addEventListener('click', async function(e) {
+  e.preventDefault();
+  console.log('Save word order clicked');
+  const order = {};
+  const modal = document.getElementById('word_edit_modal');
+  const containers = modal.querySelectorAll('[data-order-cat]');
+  containers.forEach(container => {
+    const catId = container.dataset.orderCat;
+    const items = Array.from(container.querySelectorAll('[data-order-item]')).map(el => el.dataset.orderItem);
+    if (items.length > 0) order[catId] = items;
+  });
+  
+  const wordId = this.dataset.wordId;
+  if (wordId) {
+    const result = await apiCall(`/api/game/${gameId}/update-word-order/${wordId}`, {order});
+    if (result.ok) {
+      modal.style.display = 'none';
+      setTimeout(() => window.location.reload(), 300);
+    } else {
+      alert('Error: ' + result.error);
+    }
+  }
+});
+
+document.getElementById('close_modal_btn')?.addEventListener('click', function(e) {
+  e.preventDefault();
+  console.log('Close modal clicked');
+  document.getElementById('word_edit_modal').style.display = 'none';
+});
+
+// Close modal on outside click
+document.getElementById('word_edit_modal')?.addEventListener('click', function(e) {
+  if (e.target === this) {
+    this.style.display = 'none';
+  }
+});
+
+console.log('All event listeners attached');
+</script>
+{% endblock %}

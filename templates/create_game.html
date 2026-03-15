@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Create Game - Progle{% endblock %}
+{% block content %}
+<div class="container">
+  <div style="max-width: 600px; margin: 0 auto;">
+    <div style="margin-bottom: 2rem;">
+      <h1>Create Game</h1>
+      <p class="text-muted">Design your own word game and challenge others!</p>
+    </div>
+
+    <form id="wizard" class="form-section">
+      <div class="form-group">
+        <label for="gname">Game Name</label>
+        <input id="gname" type="text" required placeholder="e.g., Animals Around the World">
+      </div>
+
+      <div class="form-group">
+        <label for="gdesc">Description</label>
+        <input id="gdesc" type="text" placeholder="e.g., Guess animals from different continents">
+      </div>
+
+      <div class="form-group">
+        <label>Number of Categories</label>
+        <div style="display: flex; gap: 1rem; align-items: center; margin-top: 0.75rem;">
+          <button id="dec" type="button" class="contrast" style="padding: 0.5rem 1rem;">−</button>
+          <div style="text-align: center; min-width: 60px;">
+            <span id="count" data-init="3" style="font-size: 1.75rem; font-weight: 700; color: var(--primary);">3</span>
+          </div>
+          <button id="inc" type="button" class="contrast" style="padding: 0.5rem 1rem;">+</button>
+        </div>
+        <small style="display: block; margin-top: 0.5rem;">You can have between 1 and 6 categories</small>
+      </div>
+
+      <div id="cats" style="margin-top: 2rem; padding-top: 2rem; border-top: 1px solid var(--gray-200);"></div>
+
+      <div class="form-group" style="margin-top: 2rem;">
+        <label for="max_guesses">Max Guesses (leave blank for unlimited)</label>
+        <input id="max_guesses" type="number" min="1" placeholder="e.g., 10">
+      </div>
+
+      <div class="form-group">
+        <label for="access">Game Access</label>
+        <select id="access">
+          <option value="public">🌍 Public - Anyone can find and play</option>
+          <option value="link">🔗 Link-only - Share via link</option>
+          <option value="private">🔒 Private - Only you can play</option>
+        </select>
+      </div>
+
+      <button id="create" type="button" style="width: 100%; margin-top: 2rem; padding: 1rem;">✨ Create Game</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

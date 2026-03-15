@@ -1,0 +1,413 @@
+{% extends "base.html" %}
+{% block title %}Play: {{ game.name }} - Progle{% endblock %}
+{% block content %}
+<div class="container">
+  <div style="max-width: 1000px; margin: 0 auto;">
+    <div style="margin-bottom: 2rem;">
+      <h1>{{ game.name }}</h1>
+      {% if game.description %}
+        <p class="text-muted">{{ game.description }}</p>
+      {% endif %}
+    </div>
+
+    <div class="form-section">
+      {% if not playing %}
+        <!-- Start Screen -->
+        <div style="text-align: center; padding: 2rem 0;">
+          <p style="font-size: 1.1rem; margin-bottom: 1rem;">Ready to play?</p>
+          {% if game.words|length == 0 %}
+            <p class="text-muted" style="font-size: 0.95rem;">This game has no words yet. Check back later!</p>
+          {% else %}
+            <p style="font-size: 0.95rem; color: var(--text-secondary); margin-bottom: 2rem;">{{ game.words|length }} words to guess from</p>
+            <form method="post">
+              <input type="hidden" name="action" value="start">
+              <button type="submit" class="success" style="padding: 1rem 2rem; font-size: 1rem;">🎮 Start Round</button>
+            </form>
+          {% endif %}
+        </div>
+      {% else %}
+        <!-- Active Game -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; padding: 1rem; background: rgba(255, 107, 53, 0.08); border-radius: 8px;">
+          <div>
+            <small style="color: var(--text-secondary);">Attempts</small>
+            <p style="font-size: 2rem; font-weight: 700; color: #ff6b35; margin: 0;">{{ attempts }}<span style="font-size: 1rem; color: var(--text-tertiary);">{% if game.max_guesses %}/{{ game.max_guesses }}{% endif %}</span></p>
+          </div>
+          {% if won %}
+            <div style="text-align: center; padding: 1rem 2rem; background: #2ecc71; color: white; border-radius: 6px; font-weight: 600;">
+              ✅ You Won!
+            </div>
+          {% elif lost %}
+            <div style="text-align: center; padding: 1rem 2rem; background: #d94520; color: white; border-radius: 6px; font-weight: 600;">
+              ❌ Game Over! Answer: <strong>{{ secret_word }}</strong>
+            </div>
+          {% endif %}
+        </div>
+
+        <!-- Guess Form -->
+        <form method="post" style="position: relative; margin-bottom: 2rem;">
+          <input type="hidden" name="action" value="guess">
+          <div class="form-group">
+            <label for="guess_input">Guess a word (press F5 to restart)</label>
+            <div style="position: relative;">
+              <input id="guess_input" type="text" placeholder="Type a word..." autocomplete="off" style="font-size: 1rem; padding: 0.75rem; width: 100%;" {% if won or lost %}disabled{% endif %}>
+              <button type="button" id="guessBtn" class="success" style="position: absolute; right: 0; top: 0; height: 100%; padding: 0 1.5rem; border: none; cursor: pointer; background: #ff6b35; font-weight: 600;" disabled {% if won or lost %}disabled{% endif %}>Guess</button>
+            </div>
+            <input type="hidden" id="guess_word_id" value="">
+          </div>
+
+          <!-- Autocomplete Dropdown -->
+          <div id="autocomplete_list" style="position: absolute; top: 100%; left: 0; right: 0; background: var(--bg-1); border: 1px solid rgba(255, 107, 53, 0.3); border-radius: 6px; max-height: 200px; overflow-y: auto; z-index: 100; display: none; margin-top: -1px;">
+            <!-- Populated by JS -->
+          </div>
+        </form>
+
+        <!-- Feedback Table -->
+        {% if history %}
+          <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 2rem;">
+              <thead>
+                <tr style="background: rgba(74, 95, 153, 0.1);">
+                  <th style="padding: 0.75rem; text-align: left; font-weight: 600; border-bottom: 2px solid rgba(74, 95, 153, 0.3);">Word</th>
+                  {% for cat in game.categories %}
+                    <th style="padding: 0.75rem; text-align: center; font-weight: 600; border-bottom: 2px solid rgba(74, 95, 153, 0.3); font-size: 0.9rem;">{{ cat.name }}</th>
+                  {% endfor %}
+                </tr>
+              </thead>
+              <tbody>
+                {% for h in history %}
+                  <tr style="border-bottom: 1px solid rgba(0, 0, 0, 0.1);">
+                    <td style="padding: 0.75rem; font-weight: 600; color: var(--text-primary);">{{ h.guess_name }}</td>
+                    {% for cat in game.categories %}
+                      <td style="padding: 0.5rem; text-align: center;">
+                        {% set fb = h.feedback_by_cat.get(cat.id) %}
+                        {% if fb %}
+                          {% set bg_color = '#2ecc71' if fb.result == 'correct' else '#f39c12' if fb.result in ['higher', 'lower'] else '#d94520' %}
+                          <div style="padding: 0.5rem; background: {{ bg_color }}; color: white; border-radius: 4px; font-size: 0.85rem; font-weight: 600;">
+                            {% if cat.kind == 'list' %}
+                              {{ fb.guess_value }}
+                            {% elif cat.kind == 'number' %}
+                              {{ fb.guess_value }}{% if fb.result == 'higher' %} ↑{% elif fb.result == 'lower' %} ↓{% endif %}
+                            {% elif cat.kind == 'date' %}
+                              {{ fb.guess_value }}{% if fb.result == 'higher' %} ↑{% elif fb.result == 'lower' %} ↓{% endif %}
+                            {% endif %}
+                          </div>
+                        {% endif %}
+                      </td>
+                    {% endfor %}
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+      {% endif %}
+    </div>
+
+    <div style="text-align: center; margin-top: 4rem; margin-bottom: 2rem;">
+      <a href="{{ url_for('hub') }}" class="btn contrast">← Back to Hub</a>
+    </div>
+  </div>
+</div>
+
+<script>
+const gameId = {{ game.id }};
+const words = [{% for w in game.words %}{'id': {{ w.id }}, 'name': '{{ w.name }}'}{% if not loop.last %},{% endif %}{% endfor %}];
+const categories = [{% for c in game.categories %}{'id': {{ c.id }}, 'name': '{{ c.name }}'}{% if not loop.last %},{% endif %}{% endfor %}];
+let allWords = words;
+let guessedWordIds = new Set();
+
+const guessInput = document.getElementById('guess_input');
+const guessBtn = document.getElementById('guessBtn');
+const guessWordIdInput = document.getElementById('guess_word_id');
+const autocompleteList = document.getElementById('autocomplete_list');
+const attemptsDisplay = document.querySelector('p[style*="font-size: 2rem"]');
+
+// Initialize guessed words from history
+const historyRows = document.querySelectorAll('tbody tr');
+historyRows.forEach(row => {
+  const wordName = row.children[0].textContent.trim();
+  const wordId = allWords.find(w => w.name === wordName)?.id;
+  if (wordId) guessedWordIds.add(wordId);
+});
+
+// Show autocomplete on input
+guessInput.addEventListener('input', function(e) {
+  const query = e.target.value.trim().toLowerCase();
+  
+  if (query.length === 0) {
+    autocompleteList.style.display = 'none';
+    guessBtn.disabled = true;
+    guessWordIdInput.value = '';
+    return;
+  }
+  
+  const filtered = allWords.filter(w => w.name.toLowerCase().startsWith(query) && !guessedWordIds.has(w.id));
+  
+  if (filtered.length === 0) {
+    autocompleteList.style.display = 'none';
+    guessBtn.disabled = true;
+    guessWordIdInput.value = '';
+    return;
+  }
+  
+  autocompleteList.innerHTML = '';
+  filtered.forEach((word, idx) => {
+    const div = document.createElement('div');
+    div.style.cssText = 'padding: 0.75rem 1rem; cursor: pointer; border-bottom: 1px solid rgba(255,107,53,0.1); font-size: 0.9rem; ' + 
+      (idx === 0 ? 'background: rgba(255,107,53,0.1); color: #ff6b35; font-weight: 600;' : 'color: var(--text-primary);');
+    div.textContent = word.name;
+    
+    div.addEventListener('click', () => submitGuess(word.id));
+    div.addEventListener('mouseover', () => {
+      document.querySelectorAll('#autocomplete_list > div').forEach(d => {
+        d.style.background = '';
+        d.style.color = 'var(--text-primary)';
+        d.style.fontWeight = 'normal';
+      });
+      div.style.background = 'rgba(255,107,53,0.1)';
+      div.style.color = '#ff6b35';
+      div.style.fontWeight = '600';
+    });
+    
+    autocompleteList.appendChild(div);
+  });
+  
+  // Select first item
+  guessWordIdInput.value = filtered[0].id;
+  autocompleteList.style.display = 'block';
+  guessBtn.disabled = false;
+});
+
+// Handle guess button click
+guessBtn.addEventListener('click', function(e) {
+  e.preventDefault();
+  const wordId = parseInt(guessWordIdInput.value);
+  if (wordId) {
+    submitGuess(wordId);
+  }
+});
+
+// Handle Enter key
+guessInput.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const wordId = parseInt(guessWordIdInput.value);
+    if (wordId) {
+      submitGuess(wordId);
+    }
+  }
+});
+
+function submitGuess(wordId) {
+  if (guessedWordIds.has(wordId)) {
+    alert('You already guessed this word!');
+    return;
+  }
+  
+  guessBtn.disabled = true;
+  
+  const formData = new FormData();
+  formData.append('action', 'guess');
+  formData.append('guess_word_id', wordId);
+  
+  fetch(window.location.href, {
+    method: 'POST',
+    body: formData
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.error) {
+      alert(data.error);
+      guessBtn.disabled = false;
+      guessInput.focus();
+      return;
+    }
+    
+    // Track guessed word
+    guessedWordIds.add(wordId);
+    
+    // Create new table row with feedback
+    const newRow = document.createElement('tr');
+    newRow.style.borderBottom = '1px solid rgba(0, 0, 0, 0.1)';
+    
+    // Word name cell
+    const wordCell = document.createElement('td');
+    wordCell.style.cssText = 'padding: 0.75rem; font-weight: 600; color: var(--text-primary);';
+    wordCell.textContent = data.guess_name;
+    newRow.appendChild(wordCell);
+    
+    // Feedback cells
+    categories.forEach(cat => {
+      const fb = data.feedback_by_cat[cat.id];
+      const cell = document.createElement('td');
+      cell.style.cssText = 'padding: 0.5rem; text-align: center;';
+      
+      if (fb) {
+        const bgColor = fb.result === 'correct' ? '#2ecc71' : 
+                        ['higher', 'lower'].includes(fb.result) ? '#f39c12' : '#d94520';
+        const div = document.createElement('div');
+        div.style.cssText = `padding: 0.5rem; background: ${bgColor}; color: white; border-radius: 4px; font-size: 0.85rem; font-weight: 600;`;
+        div.textContent = fb.guess_value;
+        cell.appendChild(div);
+      }
+      newRow.appendChild(cell);
+    });
+    
+    // Prepend row to table (add at TOP)
+    const tbody = document.querySelector('tbody');
+    if (tbody) {
+      tbody.insertBefore(newRow, tbody.firstChild);
+    } else {
+      // First guess - create table
+      const table = document.createElement('table');
+      table.style.cssText = 'width: 100%; border-collapse: collapse; margin-bottom: 2rem;';
+      
+      const thead = document.createElement('thead');
+      const headerRow = document.createElement('tr');
+      headerRow.style.background = 'rgba(74, 95, 153, 0.1)';
+      
+      const wordHeader = document.createElement('th');
+      wordHeader.style.cssText = 'padding: 0.75rem; text-align: left; font-weight: 600; border-bottom: 2px solid rgba(74, 95, 153, 0.3);';
+      wordHeader.textContent = 'Word';
+      headerRow.appendChild(wordHeader);
+      
+      // Add category headers
+      categories.forEach(cat => {
+        const th = document.createElement('th');
+        th.style.cssText = 'padding: 0.75rem; text-align: center; font-weight: 600; border-bottom: 2px solid rgba(74, 95, 153, 0.3); font-size: 0.9rem;';
+        th.textContent = cat.name;
+        headerRow.appendChild(th);
+      });
+      
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+      
+      const newTbody = document.createElement('tbody');
+      newTbody.appendChild(newRow);
+      table.appendChild(newTbody);
+      
+      const wrapper = document.createElement('div');
+      wrapper.style.cssText = 'overflow-x: auto;';
+      wrapper.appendChild(table);
+      
+      const autocompleteContainer = document.getElementById('autocomplete_list').parentElement.parentElement.parentElement;
+      autocompleteContainer.insertAdjacentElement('afterend', wrapper);
+    }
+    
+    // Update attempts display
+    if (attemptsDisplay) {
+      const span = attemptsDisplay.querySelector('span');
+      attemptsDisplay.textContent = data.attempts;
+      if (span) attemptsDisplay.appendChild(span);
+    }
+    
+    // Check if game ended
+    if (data.won) {
+      guessInput.disabled = true;
+      guessBtn.disabled = true;
+      autocompleteList.style.display = 'none';
+    } else if (data.lost) {
+      guessInput.disabled = true;
+      guessBtn.disabled = true;
+      autocompleteList.style.display = 'none';
+    } else {
+      // Clear form for next guess, keep focus
+      guessInput.value = '';
+      guessWordIdInput.value = '';
+      autocompleteList.style.display = 'none';
+      guessBtn.disabled = true;
+      guessInput.focus();  // Explicitly retain focus
+    }
+  })
+  .catch(err => {
+    console.error('Error:', err);
+    guessBtn.disabled = false;
+    guessInput.focus();
+  });
+}
+
+// Arrow keys to navigate autocomplete
+guessInput.addEventListener('keydown', function(e) {
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    const items = autocompleteList.querySelectorAll('div');
+    if (items.length === 0) return;
+    
+    const currentIndex = Array.from(items).findIndex(d => 
+      d.style.background === 'rgba(255,107,53,0.1)'
+    );
+    
+    let nextIndex = e.key === 'ArrowDown' ? (currentIndex + 1) % items.length : (currentIndex - 1 + items.length) % items.length;
+    if (currentIndex === -1) nextIndex = 0;
+    
+    items.forEach(d => {
+      d.style.background = '';
+      d.style.color = 'var(--text-primary)';
+      d.style.fontWeight = 'normal';
+    });
+    items[nextIndex].style.background = 'rgba(255,107,53,0.1)';
+    items[nextIndex].style.color = '#ff6b35';
+    items[nextIndex].style.fontWeight = '600';
+  }
+});
+
+// Escape closes autocomplete
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    autocompleteList.style.display = 'none';
+  }
+});
+
+// F5 / Ctrl+R to restart game
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'F5' || (e.ctrlKey && e.key === 'r')) {
+    e.preventDefault();
+    resetGame();
+  }
+});
+
+function resetGame() {
+  const formData = new FormData();
+  formData.append('action', 'reset');
+  
+  fetch(window.location.href, {
+    method: 'POST',
+    body: formData
+  })
+  .then(r => r.json())
+  .then(data => {
+    // Clear table
+    const oldTable = document.querySelector('table');
+    if (oldTable) oldTable.parentElement.remove();
+    
+    // Reset form
+    guessInput.value = '';
+    guessInput.disabled = false;
+    guessWordIdInput.value = '';
+    guessBtn.disabled = true;
+    autocompleteList.style.display = 'none';
+    guessInput.focus();
+    
+    // Reset tracking
+    guessedWordIds.clear();
+    
+    // Update attempts
+    if (attemptsDisplay) {
+      attemptsDisplay.textContent = '0';
+    }
+    
+    // Hide win/loss messages
+    const messages = document.querySelectorAll('div[style*="background: #2ecc71"], div[style*="background: #d94520"]');
+    messages.forEach(msg => msg.style.display = 'none');
+  })
+  .catch(err => console.error('Reset error:', err));
+}
+
+// Close autocomplete on outside click
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('#guess_input') && !e.target.closest('#autocomplete_list')) {
+    autocompleteList.style.display = 'none';
+  }
+});
+</script>
+{% endblock %}
