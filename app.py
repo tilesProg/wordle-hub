@@ -45,8 +45,8 @@ class Game(db.Model):
     access = db.Column(db.String(20), default='public')    # public, link, private
     link_token = db.Column(db.String(64), unique=True, nullable=True)
     max_guesses = db.Column(db.Integer, nullable=True)     # optional limit
-    categories = db.relationship('Category', backref='game', lazy=True, order_by="Category.position")
-    words = db.relationship('WordEntry', backref='game', lazy=True)
+    categories = db.relationship('Category', backref='game', lazy=True, cascade='all, delete-orphan', order_by="Category.position")
+    words = db.relationship('WordEntry', backref='game', lazy=True, cascade='all, delete-orphan')
 
 class Category(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -54,7 +54,7 @@ class Category(db.Model):
     name = db.Column(db.String(120), nullable=False)
     kind = db.Column(db.String(10), nullable=False)  # 'list', 'date', or 'number'
     position = db.Column(db.Integer, nullable=False)
-    list_items = db.relationship('ListItem', backref='category', lazy=True)
+    list_items = db.relationship('ListItem', backref='category', lazy=True, cascade='all, delete-orphan')
 
 class ListItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -92,6 +92,9 @@ def deserialize_cat_values(text):
         if "|" in vals:
             out[int(cid_s)] = vals.split("|")
         else:
+            # Check if there is only one item
+            if not isinstance(vals, list):
+                vals = [vals]
             out[int(cid_s)] = vals
     return out
 
@@ -716,6 +719,16 @@ def api_update_word_order(game_id, word_id):
             current_vals[cat_id] = new_items
     
     word.cat_values = serialize_cat_values(current_vals)
+    db.session.commit()
+    return jsonify({'success': True})
+
+@app.route('/api/game/<int:game_id>/delete', methods=['POST'])
+def api_delete_game(game_id):
+    game = Game.query.get_or_404(game_id)
+    if not can_edit_game(game):
+        return jsonify({'error': 'Not authorized'}), 403
+    
+    db.session.delete(game)
     db.session.commit()
     return jsonify({'success': True})
 
