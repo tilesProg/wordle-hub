@@ -271,11 +271,11 @@ def edit_game(game_id):
             for c in game.categories:
                 key = f"cat_{c.id}"
                 if c.kind == 'list':
-                    vals = request.form.getlist(key)
-                    mapping[c.id] = [v for v in vals if v]
+                    vals = [v for v in request.form.getlist(key) if v]
+                    mapping[c.id] = vals if vals else ['Not specified']
                 else:
-                    val = request.form.get(key)
-                    mapping[c.id] = val if val else ''
+                    val = request.form.get(key, '').strip()
+                    mapping[c.id] = val if val else 'Not specified'
             w = WordEntry(game_id=game.id, name=name, cat_values=serialize_cat_values(mapping))
             db.session.add(w)
             db.session.commit()
@@ -372,24 +372,33 @@ def play_game(game_id):
                 s = secret_vals.get(c.id, [] if c.kind=='list' else '')
                 gvals = guess_vals.get(c.id, [] if c.kind=='list' else '')
                 if c.kind == 'list':
-                    sset = set(s)
-                    gset = set(gvals)
-                    if not gset & sset:
-                        result = 'wrong'
-                        all_green = False
+                    sset = {v for v in set(s) if v}
+                    gset = {v for v in set(gvals) if v}
+                    if not sset and not gset:
+                        result = 'correct'
                     elif gset == sset:
                         result = 'correct'
+                    elif gset & sset:
+                        result = 'partial'
+                        all_green = False
                     else:
                         result = 'wrong'
                         all_green = False
-                    display_val = ', '.join(list(gset)[:3]) if gset else '?'
+                    display_val = ', '.join(list(gset)[:3]) if gset else 'Not specified'
                 elif c.kind == 'date':
+                    s_raw = s[0] if isinstance(s, list) else s
+                    g_raw = gvals[0] if isinstance(gvals, list) else gvals
                     try:
-                        sd = datetime.fromisoformat(s) if s else None
-                        gd = datetime.fromisoformat(gvals) if gvals else None
+                        sd = datetime.fromisoformat(s_raw) if s_raw else None
                     except Exception:
-                        sd = None; gd = None
-                    if sd and gd:
+                        sd = None
+                    try:
+                        gd = datetime.fromisoformat(g_raw) if g_raw else None
+                    except Exception:
+                        gd = None
+                    if sd is None and gd is None:
+                        result = 'correct'
+                    elif sd and gd:
                         if sd == gd:
                             result = 'correct'
                         elif gd < sd:
@@ -401,14 +410,21 @@ def play_game(game_id):
                     else:
                         result = 'wrong'
                         all_green = False
-                    display_val = gvals if gvals else '?'
+                    display_val = g_raw if g_raw else 'Not specified'
                 elif c.kind == 'number':
+                    s_raw = s[0] if isinstance(s, list) else s
+                    g_raw = gvals[0] if isinstance(gvals, list) else gvals
                     try:
-                        s_num = int(s) if s else None
-                        g_num = int(gvals) if gvals else None
+                        s_num = float(s_raw) if s_raw else None
                     except Exception:
-                        s_num = None; g_num = None
-                    if s_num is not None and g_num is not None:
+                        s_num = None
+                    try:
+                        g_num = float(g_raw) if g_raw else None
+                    except Exception:
+                        g_num = None
+                    if s_num is None and g_num is None:
+                        result = 'correct'
+                    elif s_num is not None and g_num is not None:
                         if s_num == g_num:
                             result = 'correct'
                         elif g_num < s_num:
@@ -420,13 +436,13 @@ def play_game(game_id):
                     else:
                         result = 'wrong'
                         all_green = False
-                    display_val = str(g_num) if g_num is not None else '?'
+                    display_val = (int(g_num) if g_num == int(g_num) else g_num).__str__() if g_num is not None else 'Not specified'
                 else:
                     result = 'wrong'
                     all_green = False
                     display_val = '?'
                 feedback_by_cat[c.id] = {'result': result, 'guess_value': display_val}
-            
+
             # update attempts
             session[f"{session_key}_attempts"] += 1
             attempts = session[f"{session_key}_attempts"]
@@ -654,8 +670,17 @@ def api_add_word(game_id):
     
     # Convert string keys to int
     mapping = {int(k): v for k, v in mapping.items()}
-    
-    word = WordEntry(game_id=game.id, name=name, cat_values=serialize_cat_values(mapping))
+
+    # Ensure all categories have a value, defaulting empty ones to "Not specified"
+    full_mapping = {}
+    for c in game.categories:
+        val = mapping.get(c.id)
+        if c.kind == 'list':
+            full_mapping[c.id] = val if val else ['Not specified']
+        else:
+            full_mapping[c.id] = val if val else 'Not specified'
+
+    word = WordEntry(game_id=game.id, name=name, cat_values=serialize_cat_values(full_mapping))
     db.session.add(word)
     db.session.commit()
     return jsonify({'success': True, 'word_id': word.id})

@@ -81,14 +81,14 @@
                       <td style="padding: 0.5rem; text-align: center;">
                         {% set fb = h.feedback_by_cat.get(cat.id) %}
                         {% if fb %}
-                          {% set bg_color = '#2ecc71' if fb.result == 'correct' else '#f39c12' if fb.result in ['higher', 'lower'] else '#d94520' %}
+                          {% set bg_color = '#2ecc71' if fb.result == 'correct' else ('#f39c12' if fb.result == 'partial' else '#d94520') %}
                           <div style="padding: 0.5rem; background: {{ bg_color }}; color: white; border-radius: 4px; font-size: 0.85rem; font-weight: 600;">
                             {% if cat.kind == 'list' %}
                               {{ fb.guess_value }}
                             {% elif cat.kind == 'number' %}
-                              {{ fb.guess_value }}{% if fb.result == 'higher' %} ↑{% elif fb.result == 'lower' %} ↓{% endif %}
+                              {{ fb.guess_value }}{% if fb.result == 'higher' %} ↓{% elif fb.result == 'lower' %} ↑{% endif %}
                             {% elif cat.kind == 'date' %}
-                              {{ fb.guess_value }}{% if fb.result == 'higher' %} ↑{% elif fb.result == 'lower' %} ↓{% endif %}
+                              {{ fb.guess_value }}{% if fb.result == 'higher' %} ↓{% elif fb.result == 'lower' %} ↑{% endif %}
                             {% endif %}
                           </div>
                         {% endif %}
@@ -111,10 +111,12 @@
 
 <script>
 const gameId = {{ game.id }};
-const words = [{% for w in game.words %}{'id': {{ w.id }}, 'name': '{{ w.name }}'}{% if not loop.last %},{% endif %}{% endfor %}];
+const words = [{% for w in game.words %}{'id': {{ w.id }}, 'name': {{ w.name | tojson }}}{% if not loop.last %},{% endif %}{% endfor %}];
 const categories = [{% for c in game.categories %}{'id': {{ c.id }}, 'name': '{{ c.name }}'}{% if not loop.last %},{% endif %}{% endfor %}];
 let allWords = words;
 let guessedWordIds = new Set();
+let filteredWords = [];
+let selectedIndex = -1;
 
 const guessInput = document.getElementById('guess_input');
 const guessBtn = document.getElementById('guessBtn');
@@ -141,39 +143,18 @@ guessInput.addEventListener('input', function(e) {
     return;
   }
   
-  const filtered = allWords.filter(w => w.name.toLowerCase().startsWith(query) && !guessedWordIds.has(w.id));
-  
-  if (filtered.length === 0) {
+  filteredWords = allWords.filter(w => w.name.toLowerCase().startsWith(query) && !guessedWordIds.has(w.id));
+  selectedIndex = 0;
+
+  if (filteredWords.length === 0) {
     autocompleteList.style.display = 'none';
     guessBtn.disabled = true;
     guessWordIdInput.value = '';
     return;
   }
-  
-  autocompleteList.innerHTML = '';
-  filtered.forEach((word, idx) => {
-    const div = document.createElement('div');
-    div.style.cssText = 'padding: 0.75rem 1rem; cursor: pointer; border-bottom: 1px solid rgba(255,107,53,0.1); font-size: 0.9rem; ' + 
-      (idx === 0 ? 'background: rgba(255,107,53,0.1); color: #ff6b35; font-weight: 600;' : 'color: var(--text-primary);');
-    div.textContent = word.name;
-    
-    div.addEventListener('click', () => submitGuess(word.id));
-    div.addEventListener('mouseover', () => {
-      document.querySelectorAll('#autocomplete_list > div').forEach(d => {
-        d.style.background = '';
-        d.style.color = 'var(--text-primary)';
-        d.style.fontWeight = 'normal';
-      });
-      div.style.background = 'rgba(255,107,53,0.1)';
-      div.style.color = '#ff6b35';
-      div.style.fontWeight = '600';
-    });
-    
-    autocompleteList.appendChild(div);
-  });
-  
-  // Select first item
-  guessWordIdInput.value = filtered[0].id;
+
+  renderAutocomplete();
+  guessWordIdInput.value = filteredWords[0].id;
   autocompleteList.style.display = 'block';
   guessBtn.disabled = false;
 });
@@ -243,11 +224,13 @@ function submitGuess(wordId) {
       cell.style.cssText = 'padding: 0.5rem; text-align: center;';
       
       if (fb) {
-        const bgColor = fb.result === 'correct' ? '#2ecc71' : 
-                        ['higher', 'lower'].includes(fb.result) ? '#f39c12' : '#d94520';
+        const bgColor = fb.result === 'correct' ? '#2ecc71' : fb.result === 'partial' ? '#f39c12' : '#d94520';
         const div = document.createElement('div');
         div.style.cssText = `padding: 0.5rem; background: ${bgColor}; color: white; border-radius: 4px; font-size: 0.85rem; font-weight: 600;`;
-        div.textContent = fb.guess_value;
+        let label = fb.guess_value;
+        if (fb.result === 'higher') label += ' ↓';
+        else if (fb.result === 'lower') label += ' ↑';
+        div.textContent = label;
         cell.appendChild(div);
       }
       newRow.appendChild(cell);
@@ -326,28 +309,39 @@ function submitGuess(wordId) {
   });
 }
 
+function renderAutocomplete() {
+  autocompleteList.innerHTML = '';
+  filteredWords.forEach((word, idx) => {
+    const div = document.createElement('div');
+    const active = idx === selectedIndex;
+    div.style.cssText = 'padding: 0.75rem 1rem; cursor: pointer; border-bottom: 1px solid rgba(255,107,53,0.1); font-size: 0.9rem;' +
+      (active ? 'background: rgba(255,107,53,0.1); color: #ff6b35; font-weight: 600;' : 'color: var(--text-primary);');
+    div.textContent = word.name;
+    div.addEventListener('click', () => submitGuess(word.id));
+    div.addEventListener('mouseover', () => {
+      selectedIndex = idx;
+      renderAutocomplete();
+      guessWordIdInput.value = word.id;
+    });
+    autocompleteList.appendChild(div);
+  });
+}
+
 // Arrow keys to navigate autocomplete
 guessInput.addEventListener('keydown', function(e) {
-  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+  if (autocompleteList.style.display === 'none' || filteredWords.length === 0) return;
+  if (e.key === 'ArrowDown') {
     e.preventDefault();
-    const items = autocompleteList.querySelectorAll('div');
-    if (items.length === 0) return;
-    
-    const currentIndex = Array.from(items).findIndex(d => 
-      d.style.background === 'rgba(255,107,53,0.1)'
-    );
-    
-    let nextIndex = e.key === 'ArrowDown' ? (currentIndex + 1) % items.length : (currentIndex - 1 + items.length) % items.length;
-    if (currentIndex === -1) nextIndex = 0;
-    
-    items.forEach(d => {
-      d.style.background = '';
-      d.style.color = 'var(--text-primary)';
-      d.style.fontWeight = 'normal';
-    });
-    items[nextIndex].style.background = 'rgba(255,107,53,0.1)';
-    items[nextIndex].style.color = '#ff6b35';
-    items[nextIndex].style.fontWeight = '600';
+    selectedIndex = (selectedIndex + 1) % filteredWords.length;
+    guessWordIdInput.value = filteredWords[selectedIndex].id;
+    renderAutocomplete();
+    autocompleteList.children[selectedIndex]?.scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    selectedIndex = (selectedIndex - 1 + filteredWords.length) % filteredWords.length;
+    guessWordIdInput.value = filteredWords[selectedIndex].id;
+    renderAutocomplete();
+    autocompleteList.children[selectedIndex]?.scrollIntoView({ block: 'nearest' });
   }
 });
 
