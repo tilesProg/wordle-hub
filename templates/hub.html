@@ -15,7 +15,7 @@
           <div class="card-header">
             <h3>{{ gme.name }}</h3>
             {% if g.user and g.user.id == gme.creator_id %}
-              <a href="{{ url_for('edit_game', game_id=gme.id) }}" class="btn contrast card-edit-btn" title="Edit this game">✏️ Edit</a>
+              <a href="{{ url_for('constructor.edit_game', game_id=gme.id) }}" class="btn contrast card-edit-btn" title="Edit this game">✏️ Edit</a>
             {% endif %}
           </div>
 
@@ -33,7 +33,7 @@
 
           <!-- Card Footer: Play Button -->
           <div class="card-footer">
-            <a href="{{ url_for('play_game', game_id=gme.id) }}" class="btn">🎮 Play</a>
+            <a href="{{ url_for('game.play_game', game_id=gme.id) }}" class="btn">🎮 Play</a>
           </div>
         </article>
       {% endfor %}
@@ -43,7 +43,7 @@
       <h2 style="color: var(--text-secondary); margin-bottom: 1rem;">No games yet</h2>
       <p class="text-muted">Be the first to create a game! Craft your own word challenges and share them with the community.</p>
       {% if not g.user %}
-        <a href="{{ url_for('login') }}" class="btn" style="margin-top: 1rem;">Get Started</a>
+        <a href="{{ url_for('auth.login') }}" class="btn" style="margin-top: 1rem;">Get Started</a>
       {% endif %}
     </div>
   {% endif %}

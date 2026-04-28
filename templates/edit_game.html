@@ -154,7 +154,7 @@
                 <div class="word-item" data-word-id="{{ word.id }}" data-word-name="{{ word.name }}" style="padding: 0.6rem; border-bottom: 1px solid rgba(255, 107, 53, 0.1); display: flex; justify-content: space-between; align-items: start; gap: 0.5rem; cursor: pointer; transition: 0.2s;">
                   <div style="flex: 1; min-width: 0;">
                     <h4 style="margin: 0 0 0.25rem 0; color: var(--text-primary); word-break: break-word; font-size: 0.9rem;">{{ word.name }}</h4>
-                    {% set cat_vals = word.cat_values | deserialize_cat_values %}
+                    {% set cat_vals = word.values_by_category %}
                     <div style="display: flex; flex-wrap: wrap; gap: 0.3rem;">
                       {% for cat in game.categories %}
                         {% set val = cat_vals.get(cat.id, [] if cat.kind == 'list' else '') %}
@@ -224,7 +224,7 @@
 
     <!-- Back to Game / Delete Game -->
     <div style="text-align: center; display: flex; gap: 1rem; justify-content: center; margin-top: 3rem; margin-bottom: 2rem;">
-      <a href="{{ url_for('play_game', game_id=game.id) }}" class="btn contrast">← Back to Game</a>
+      <a href="{{ url_for('game.play_game', game_id=game.id) }}" class="btn contrast">← Back to Game</a>
       <button id="delete_game_btn" type="button" style="background: #d94520; border: none; color: white; padding: 0.5rem 1.5rem; border-radius: 4px; cursor: pointer; font-weight: 600;">🗑️ Delete Game</button>
     </div>
   </div>
@@ -593,7 +593,7 @@ document.getElementById('delete_game_btn')?.addEventListener('click', async func
   const result = await apiCall(`/api/game/${gameId}/delete`, {});
   if (result.ok) {
     console.log('Game deleted successfully');
-    setTimeout(() => window.location.href = '{{ url_for("hub") }}', 300);
+    setTimeout(() => window.location.href = '{{ url_for("game.hub") }}', 300);
   } else {
     alert('Error: ' + result.error);
     this.disabled = false;

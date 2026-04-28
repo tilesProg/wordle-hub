@@ -13,15 +13,15 @@
   <header class="container-full">
     <div class="container">
       <nav>
-        <a href="{{ url_for('hub') }}" class="brand">Progle</a>
+        <a href="{{ url_for('game.hub') }}" class="brand">Progle</a>
         <div class="nav-right">
           {% if g.user %}
             <span class="user-badge">{{ g.user.username }}</span>
-            <a href="{{ url_for('create_game') }}" class="nav-link">+ Create</a>
-            <a href="{{ url_for('logout') }}" class="nav-link">Logout</a>
+            <a href="{{ url_for('constructor.create_game') }}" class="nav-link">+ Create</a>
+            <a href="{{ url_for('auth.logout') }}" class="nav-link">Logout</a>
           {% else %}
-            <a href="{{ url_for('login') }}" class="nav-link">Login</a>
-            <a href="{{ url_for('register') }}" class="nav-link">Register</a>
+            <a href="{{ url_for('auth.login') }}" class="nav-link">Login</a>
+            <a href="{{ url_for('auth.register') }}" class="nav-link">Register</a>
           {% endif %}
         </div>
       </nav>
